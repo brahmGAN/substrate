@@ -827,7 +827,7 @@ impl<Balance: Default> EraPayout<Balance> for () {
 /// Adaptor to turn a `PiecewiseLinear` curve definition into an `EraPayout` impl, used for
 /// backwards compatibility.
 pub struct ConvertCurve<T>(sp_std::marker::PhantomData<T>);
-impl<Balance: AtLeast32BitUnsigned + Clone, T: Get<&'static PiecewiseLinear<'static>>>
+impl<Balance: AtLeast32BitUnsigned + Clone + core::convert::From<u128>, T: Get<&'static PiecewiseLinear<'static>>>
 	EraPayout<Balance> for ConvertCurve<T>
 {
 	fn era_payout(

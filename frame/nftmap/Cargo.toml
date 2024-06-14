@@ -1,0 +1,54 @@
+[package]
+name = "pallet-nftmap"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "nfts maping for validators"
+authors = ["GPU Net <>"]
+homepage = "https://gpu.net"
+repository = "https://github.com/brahmGAN/substrate"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+parity-scale-codec = { version = "3.6.1", default-features = false, features = ["derive"] }
+scale-info = { version = "2.5.0", default-features = false }
+sp-runtime = { version = "24.0.0", default-features = false, path = "../../primitives/runtime" }
+
+#frame deps
+
+
+frame-benchmarking = { version = "4.0.0-dev", default-features = false, optional = true, path = "../benchmarking" }
+frame-support = { version = "4.0.0-dev", default-features = false, path = "../support" }
+frame-system = { version = "4.0.0-dev", default-features = false, path = "../system" }
+
+
+[dev-dependencies]
+sp-io = { version = "23.0.0", default-features = false, path = "../../primitives/io" }
+sp-core = { version = "21.0.0", default-features = false, path = "../../primitives/core" }
+
+
+
+[features]
+default = ["std"]
+
+std = [
+	"parity-scale-codec/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"scale-info/std",
+	"sp-io/std",
+	"sp-runtime/std",
+]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+]
+try-runtime = [
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+	"sp-runtime/try-runtime",
+]
