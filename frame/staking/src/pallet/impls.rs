@@ -747,7 +747,7 @@ impl<T: Config> Pallet<T> {
 			mul = 2.0;
 		}
 	
-		mul // Return the multiplier
+		nftcount as f64 * mul // Return the multiplier
 	}
 
 	/// Helper to set a new `ForceEra` mode.
