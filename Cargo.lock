@@ -2513,8 +2513,7 @@ dependencies = [
 [[package]]
 name = "finality-grandpa"
 version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36530797b9bf31cd4ff126dcfee8170f86b00cfdcea3269d73133cc0415945c3"
+source = "git+https://github.com/brahmGAN/finality-grandpa.git?branch=aryan/downgrade-super-majority#7a44217428079132c3686289a9e303f0249b48b3"
 dependencies = [
  "either",
  "futures",
