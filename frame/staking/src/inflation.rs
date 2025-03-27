@@ -29,82 +29,159 @@ use sp_runtime::{curve::PiecewiseLinear, traits::AtLeast32BitUnsigned, Perbill};
 /// era_per_year` `maximum-payout = max_yearly_inflation * total_tokens / era_per_year`
 ///
 /// `era_duration` is expressed in millisecond.
+use core::ops::{Div, Mul};
+
 pub fn compute_total_payout<N>(
-	yearly_inflation: &PiecewiseLinear<'static>,
-	npos_token_staked: N,
-	total_tokens: N,
-	era_duration: u64,
+    _yearly_inflation: &PiecewiseLinear<'static>,
+    circulating_supply: N,
+    total_supply: N,
+    _era_duration: u64,
 ) -> (N, N)
 where
-	N: AtLeast32BitUnsigned + Clone + core::convert::From<u128>,
+    N: AtLeast32BitUnsigned + Clone + core::convert::From<u128> + Div<Output = N> + Mul<Output = N> + PartialOrd,
 {
-	// Milliseconds per year for the Julian year (365.25 days).
-	// const MILLISECONDS_PER_YEAR: u64 = 1000 * 3600 * 24 * 36525 / 100;
-
-	// let portion = Perbill::from_rational(era_duration as u64, MILLISECONDS_PER_YEAR);
-	// let payout = portion *
-	// 	yearly_inflation
-	// 		.calculate_for_fraction_times_denominator(npos_token_staked, total_tokens.clone());
-	// let maximum = portion * (yearly_inflation.maximum * total_tokens);
-	let payout = N::from(480000000000000000000u128);
-	let maximum = N::from(1440000000000000000000u128);
-	(payout, maximum)
+    // Define base emission rate (B₀) = 1440 tokens/day (in wei units)
+    let wei_multiplier = N::from(1000000000000000000u128);
+    let b0 = N::from(1440u128) * wei_multiplier;
+    
+    // Calculate half of total supply
+    let half_supply = total_supply.clone() / N::from(2u128);
+    
+    // Calculate total emission based on formula D(Sc)
+    let total_emission: N;
+    
+    if circulating_supply <= half_supply {
+        // D(Sc) = B₀ × 2ⁿ when Sc ≤ 0.5 · St
+        
+        // Calculate n based on specific milestone percentages from the table:
+        // 3.13%, 6.25%, 12.5%, 25%, 50%
+        let mut n = 0;
+        
+        // 3.13% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(313u128) / N::from(10000u128)) {
+            n = 1; // 2880 emission (2¹ × base rate)
+        }
+        
+        // 6.25% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(625u128) / N::from(10000u128)) {
+            n = 2; // 5760 emission (2² × base rate)
+        }
+        
+        // 12.5% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(1250u128) / N::from(10000u128)) {
+            n = 3; // 11520 emission (2³ × base rate)
+        }
+        
+        // 25% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(2500u128) / N::from(10000u128)) {
+            n = 4; // 23040 emission (2⁴ × base rate)
+        }
+        
+        // 50% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(5000u128) / N::from(10000u128)) {
+            n = 5; // 46080 emission (2⁵ × base rate)
+        }
+        
+        // Calculate 2ⁿ
+        let two_power_n = N::from(1u128 << n);
+        
+        // Apply the formula D(Sc) = B₀ × 2ⁿ
+        total_emission = b0 * two_power_n;
+    } else {
+        // D(Sc) = B₀ × 1/2ᵐ when Sc > 0.5 · St
+        
+        // Calculate m based on specific milestone percentages from the table:
+        // 75%, 87.5%, 93.75%, 96.88%
+        let mut m = 0;
+        
+        // 75% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(7500u128) / N::from(10000u128)) {
+            m = 1; // 23040 emission (base rate × 2⁵/2¹)
+        }
+        
+        // 87.5% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(8750u128) / N::from(10000u128)) {
+            m = 2; // 11520 emission (base rate × 2⁵/2²)
+        }
+        
+        // 93.75% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(9375u128) / N::from(10000u128)) {
+            m = 3; // 5760 emission (base rate × 2⁵/2³)
+        }
+        
+        // 96.88% milestone
+        if circulating_supply >= (total_supply.clone() * N::from(9688u128) / N::from(10000u128)) {
+            m = 4; // 2880 emission (base rate × 2⁵/2⁴)
+        }
+        
+        // Calculate 2⁵/2ᵐ (max rate divided by 2ᵐ)
+        let max_multiplier = N::from(1u128 << 5); // 2⁵
+        let divisor = N::from(1u128 << m); // 2ᵐ
+        
+        // Apply the formula D(Sc) = B₀ × 2⁵/2ᵐ = B₀ × 2⁵⁻ᵐ
+        total_emission = b0 * max_multiplier / divisor;
+    }
+    
+    // Validator payout is 480/1440 (1/3) of total emission
+    let validator_payout = total_emission.clone() * N::from(480u128) / N::from(1440u128);
+    
+    (validator_payout, total_emission)
 }
 
 #[cfg(test)]
-mod test {
-	use sp_runtime::curve::PiecewiseLinear;
-
-	pallet_staking_reward_curve::build! {
-		const I_NPOS: PiecewiseLinear<'static> = curve!(
-			min_inflation: 0_025_000,
-			max_inflation: 0_100_000,
-			ideal_stake: 0_500_000,
-			falloff: 0_050_000,
-			max_piece_count: 40,
-			test_precision: 0_005_000,
-		);
-	}
-
-	#[test]
-	fn npos_curve_is_sensible() {
-		const YEAR: u64 = 365 * 24 * 60 * 60 * 1000;
-
-		// check maximum inflation.
-		// not 10_000 due to rounding error.
-		assert_eq!(super::compute_total_payout(&I_NPOS, 0, 100_000u64, YEAR).1, 9_993);
-
-		// super::I_NPOS.calculate_for_fraction_times_denominator(25, 100)
-		assert_eq!(super::compute_total_payout(&I_NPOS, 0, 100_000u64, YEAR).0, 2_498);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 5_000, 100_000u64, YEAR).0, 3_248);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 25_000, 100_000u64, YEAR).0, 6_246);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 40_000, 100_000u64, YEAR).0, 8_494);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 50_000, 100_000u64, YEAR).0, 9_993);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 60_000, 100_000u64, YEAR).0, 4_379);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 75_000, 100_000u64, YEAR).0, 2_733);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 95_000, 100_000u64, YEAR).0, 2_513);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 100_000, 100_000u64, YEAR).0, 2_505);
-
-		const DAY: u64 = 24 * 60 * 60 * 1000;
-		assert_eq!(super::compute_total_payout(&I_NPOS, 25_000, 100_000u64, DAY).0, 17);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 50_000, 100_000u64, DAY).0, 27);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 75_000, 100_000u64, DAY).0, 7);
-
-		const SIX_HOURS: u64 = 6 * 60 * 60 * 1000;
-		assert_eq!(super::compute_total_payout(&I_NPOS, 25_000, 100_000u64, SIX_HOURS).0, 4);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 50_000, 100_000u64, SIX_HOURS).0, 7);
-		assert_eq!(super::compute_total_payout(&I_NPOS, 75_000, 100_000u64, SIX_HOURS).0, 2);
-
-		const HOUR: u64 = 60 * 60 * 1000;
-		assert_eq!(
-			super::compute_total_payout(
-				&I_NPOS,
-				2_500_000_000_000_000_000_000_000_000u128,
-				5_000_000_000_000_000_000_000_000_000u128,
-				HOUR
-			)
-			.0,
-			57_038_500_000_000_000_000_000
-		);
-	}
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_emission_at_specific_milestones() {
+        // Create an empty PiecewiseLinear directly (no constructor needed)
+        let dummy_inflation = PiecewiseLinear { 
+            points: &[],
+            maximum: Perbill::zero(),
+        };
+        
+        // Test with 200M total tokens
+        let total_tokens = 200_000_000_000_000_000_000_000_000u128; // 200M tokens in wei
+        
+        // Base emission rate
+        let base_rate = 1440_000_000_000_000_000_000u128;
+        
+        // Test at each milestone from the table
+        let milestones = [
+            (313, 2), // 3.13% -> 2880 (2¹ × base)
+            (625, 4), // 6.25% -> 5760 (2² × base)
+            (1250, 8), // 12.5% -> 11520 (2³ × base)
+            (2500, 16), // 25% -> 23040 (2⁴ × base)
+            (5000, 32), // 50% -> 46080 (2⁵ × base)
+            (7500, 16), // 75% -> 23040 (2⁵/2¹ × base)
+            (8750, 8), // 87.5% -> 11520 (2⁵/2² × base)
+            (9375, 4), // 93.75% -> 5760 (2⁵/2³ × base)
+            (9688, 2), // 96.88% -> 2880 (2⁵/2⁴ × base)
+        ];
+        
+        for (percent_x100, multiplier) in milestones {
+            // Calculate circulating supply at this percentage
+            let circulating_supply = total_tokens * percent_x100 / 10000;
+            
+            // Get emission at this supply level
+            let (validator_payout, total_emission) = 
+                compute_total_payout::<u128>(&dummy_inflation, circulating_supply, total_tokens, 0);
+                
+            // Expected emission is base_rate × multiplier
+            let expected_emission = base_rate * multiplier;
+            
+            // Verify emission matches table
+            assert_eq!(
+                total_emission, 
+                expected_emission,
+                "Emission at {}.{}% should be {} × base rate", 
+                percent_x100 / 100, 
+                percent_x100 % 100,
+                multiplier
+            );
+            
+            // Verify validator payout is 1/3 of total emission
+            assert_eq!(validator_payout * 3, total_emission);
+        }
+    }
 }
