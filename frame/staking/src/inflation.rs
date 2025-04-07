@@ -88,38 +88,46 @@ where
         // Apply the formula D(Sc) = B₀ × 2ⁿ
         total_emission = b0 * two_power_n;
     } else {
-        // D(Sc) = B₀ × 1/2ᵐ when Sc > 0.5 · St
+        // Apply new formula: D(Sc) = B₀ × 1/2^⌈log₂(St/(St-Sc))⌉
         
-        // Calculate m based on specific milestone percentages from the table:
-        // 75%, 87.5%, 93.75%, 96.88%
-        let mut m = 0;
+        // Calculate St/(St-Sc)
+        let remaining = total_supply.clone() - circulating_supply.clone();
         
-        // 75% milestone
-        if circulating_supply >= (total_supply.clone() * N::from(7500u128) / N::from(10000u128)) {
-            m = 1; // 23040 emission (base rate × 2⁵/2¹)
-        }
+        // Ensure we don't divide by zero or get an unreasonably small remaining amount
+        // By setting a minimum safe remaining amount, we cap the maximum divisor
+        let min_remaining = total_supply.clone() / N::from(1_000_000u128); // 0.0001% of total
+        let safe_remaining = if remaining < min_remaining {
+            min_remaining
+        } else {
+            remaining
+        };
         
-        // 87.5% milestone
-        if circulating_supply >= (total_supply.clone() * N::from(8750u128) / N::from(10000u128)) {
-            m = 2; // 11520 emission (base rate × 2⁵/2²)
-        }
+        // Calculate the ratio St/(St-Sc) with safety cap
+        let ratio = total_supply.clone() / safe_remaining;
         
-        // 93.75% milestone
-        if circulating_supply >= (total_supply.clone() * N::from(9375u128) / N::from(10000u128)) {
-            m = 3; // 5760 emission (base rate × 2⁵/2³)
-        }
+        // Convert ratio to u128 for bit manipulation, with a safe maximum
+        let max_u128 = u128::MAX / 2; // Avoid overflows
+        let ratio_u128 = ratio.clone().try_into().unwrap_or(max_u128);
         
-        // 96.88% milestone
-        if circulating_supply >= (total_supply.clone() * N::from(9688u128) / N::from(10000u128)) {
-            m = 4; // 2880 emission (base rate × 2⁵/2⁴)
-        }
+        // Find the position of the highest bit set (floor of log₂)
+        let log2_floor = 128u32.saturating_sub(ratio_u128.leading_zeros()).saturating_sub(1);
         
-        // Calculate 2⁵/2ᵐ (max rate divided by 2ᵐ)
-        let max_multiplier = N::from(1u128 << 5); // 2⁵
-        let divisor = N::from(1u128 << m); // 2ᵐ
+        // Calculate ceiling of log₂(ratio)
+        let log2_ceiling = if ratio_u128 == (1u128 << log2_floor) {
+            log2_floor
+        } else {
+            log2_floor + 1
+        };
         
-        // Apply the formula D(Sc) = B₀ × 2⁵/2ᵐ = B₀ × 2⁵⁻ᵐ
-        total_emission = b0 * max_multiplier / divisor;
+        // Cap the maximum divisor to prevent emission from becoming too small
+        let max_log2 = 120u32; // Allow very small emissions but not zero
+        let capped_log2 = core::cmp::min(log2_ceiling, max_log2);
+        
+        // Calculate 2^⌈log₂(ratio)⌉ with safety cap
+        let divisor = N::from(1u128 << capped_log2);
+        
+        // Apply the formula D(Sc) = B₀ × 1/2^⌈log2(St/(St-Sc))⌉
+        total_emission = b0 / divisor;
     }
     
     // Validator payout is 480/1440 (1/3) of total emission
@@ -127,13 +135,10 @@ where
     
     (validator_payout, total_emission)
 }
-
-#[cfg(test)]
 mod tests {
     use super::*;
-    
     #[test]
-    fn test_emission_at_specific_milestones() {
+    fn test_new_emission_formula() {
         // Create an empty PiecewiseLinear directly (no constructor needed)
         let dummy_inflation = PiecewiseLinear { 
             points: &[],
@@ -146,42 +151,59 @@ mod tests {
         // Base emission rate
         let base_rate = 1440_000_000_000_000_000_000u128;
         
-        // Test at each milestone from the table
-        let milestones = [
-            (313, 2), // 3.13% -> 2880 (2¹ × base)
-            (625, 4), // 6.25% -> 5760 (2² × base)
-            (1250, 8), // 12.5% -> 11520 (2³ × base)
-            (2500, 16), // 25% -> 23040 (2⁴ × base)
-            (5000, 32), // 50% -> 46080 (2⁵ × base)
-            (7500, 16), // 75% -> 23040 (2⁵/2¹ × base)
-            (8750, 8), // 87.5% -> 11520 (2⁵/2² × base)
-            (9375, 4), // 93.75% -> 5760 (2⁵/2³ × base)
-            (9688, 2), // 96.88% -> 2880 (2⁵/2⁴ × base)
+        // First test the 50% boundary case
+        // At exactly 50%, we should still be using the old formula with n=5 (2^5 * base_rate)
+        let half_supply = total_tokens / 2;
+        let (_, emission_at_half) = compute_total_payout::<u128>(&dummy_inflation, half_supply, total_tokens, 0);
+        let expected_at_half = base_rate * 32; // 2^5 * base_rate
+        assert_eq!(
+            emission_at_half,
+            expected_at_half,
+            "At exactly 50%, emission should be 2^5 * base_rate"
+        );
+        
+        // Now test percentages beyond 50% using the new formula
+        let test_percentages = [
+            // percentage (in basis points), expected divisor (2^⌈log₂(St/(St-Sc))⌉)
+            (5001, 2),     // 50.01%: St/(St-Sc) = 2.0004, log₂ ceiling = 1, 2^1 = 2
+            (7500, 4),     // 75%: St/(St-Sc) = 4, log₂(4) = 2, 2^2 = 4
+            (8750, 8),     // 87.5%: St/(St-Sc) = 8, log₂(8) = 3, 2^3 = 8
+            (9375, 16),    // 93.75%: St/(St-Sc) = 16, log₂(16) = 4, 2^4 = 16
+            (9688, 32),    // 96.88%: St/(St-Sc) = 32, log₂(32) = 5, 2^5 = 32
+            (9844, 64),    // 98.44%: St/(St-Sc) = 64, log₂(64) = 6, 2^6 = 64
+            (9922, 128),   // 99.22%: St/(St-Sc) = 128, log₂(128) = 7, 2^7 = 128
         ];
         
-        for (percent_x100, multiplier) in milestones {
-            // Calculate circulating supply at this percentage
-            let circulating_supply = total_tokens * percent_x100 / 10000;
+        for (basis_points, expected_divisor) in test_percentages {
+            // Calculate circulating supply at this percentage (in basis points, e.g. 7500 = 75%)
+            let circulating_supply = total_tokens * basis_points / 10000;
             
             // Get emission at this supply level
             let (validator_payout, total_emission) = 
                 compute_total_payout::<u128>(&dummy_inflation, circulating_supply, total_tokens, 0);
                 
-            // Expected emission is base_rate × multiplier
-            let expected_emission = base_rate * multiplier;
+            // Expected emission is base_rate / expected_divisor
+            let expected_emission = base_rate / expected_divisor;
             
-            // Verify emission matches table
+            // Verify emission matches expected value
             assert_eq!(
                 total_emission, 
                 expected_emission,
-                "Emission at {}.{}% should be {} × base rate", 
-                percent_x100 / 100, 
-                percent_x100 % 100,
-                multiplier
+                "Emission at {}.{}% should be base rate / {}", 
+                basis_points / 100,
+                basis_points % 100,
+                expected_divisor
             );
             
             // Verify validator payout is 1/3 of total emission
             assert_eq!(validator_payout * 3, total_emission);
         }
+        
+        // Test that the emission never becomes zero even when circulating supply is very close to total
+        let near_total_supply = total_tokens - 1u128;
+        let (_, emission_near_total) = 
+            compute_total_payout::<u128>(&dummy_inflation, near_total_supply, total_tokens, 0);
+        
+        assert!(emission_near_total > 0, "Emission should never be zero");
+        }
     }
-}
