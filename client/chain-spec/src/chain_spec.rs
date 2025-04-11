@@ -24,6 +24,7 @@ use sc_network::config::MultiaddrWithPeerId;
 use sc_telemetry::TelemetryEndpoints;
 use serde::{Deserialize, Serialize};
 use serde_json as json;
+use std::path::Path;
 use sp_core::{
 	storage::{ChildInfo, Storage, StorageChild, StorageData, StorageKey},
 	Bytes,
@@ -294,6 +295,69 @@ impl<G, E> ChainSpec<G, E> {
 	fn chain_type(&self) -> ChainType {
 		self.client_spec.chain_type.clone()
 	}
+
+	
+		
+	/// Import balances from a JSON file and add them to the genesis storage
+	pub fn with_balances_from_file(
+		mut self,
+		 path: &Path
+		) -> Result<Self, String>
+		where
+			G: RuntimeGenesis + 'static
+		{
+		use crate::balance_import::balances_config_from_file;
+			
+		if path.exists() {
+			println!("Importing balances from: {:?}", path);
+			let balances_storage = balances_config_from_file(path, "Balances", "Account")?;
+			println!("Successfully imported {} account balances", balances_storage.len());
+				
+				// Create a storage source from the existing genesis and the imported balances
+			let genesis = match self.genesis.resolve()? {
+				Genesis::Runtime(g) => {
+					let mut storage = g.build_storage()?;
+						
+					// Add the balances to the storage
+					for (key, value) in balances_storage {
+						storage.top.insert(key.0, value.0);
+					}
+						
+						storage
+					},
+				Genesis::Raw(mut raw) => {
+				// Add the balances to the existing raw storage
+				raw.top.extend(balances_storage);
+				let mut storage = Storage::default();
+						
+				storage.top = raw.top.into_iter().map(|(k, v)| (k.0, v.0)).collect();
+				storage.children_default = raw.children_default
+						.into_iter()
+						.map(|(k, v)| {
+							let key_bytes = k.0.clone(); 
+							(
+								k.0,
+								StorageChild {
+									data: v.into_iter().map(|(k, v)| (k.0, v.0)).collect(),
+									child_info: ChildInfo::new_default(&key_bytes),
+									},
+								)
+							})
+							.collect();
+						
+						storage
+					},
+					Genesis::StateRootHash(_) => return Err("Cannot import balances into a chain spec with only a state root hash".into()),
+				};
+				
+				// Update the genesis source
+				self.genesis = GenesisSource::Storage(genesis);
+			} else {
+				println!("Balance file not found at: {:?}", path);
+			}
+			
+			Ok(self)
+		}
 }
 
 impl<G, E: serde::de::DeserializeOwned> ChainSpec<G, E> {
@@ -439,7 +503,26 @@ where
 			.iter()
 			.map(|(h, c)| (h.clone(), c.0.clone()))
 			.collect()
+
 	}
+
+	fn with_balances_from_file(&mut self, path: &std::path::Path) -> Result<(), String> {
+        let mut new_self = std::mem::replace(self, ChainSpec::from_genesis(
+            "",
+            "",
+            ChainType::Development,
+            || unimplemented!(),
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            self.extensions().clone(),
+        )).with_balances_from_file(path)?;
+        
+        std::mem::swap(self, &mut new_self);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -504,6 +587,79 @@ mod tests {
 		.unwrap();
 
 		assert_eq!(spec.extensions().my_property, "Test Extension");
+	}
+
+	#[test]
+	fn should_import_balances_into_chain_spec() {
+		use std::{fs::File, io::Write};
+		use tempfile::tempdir;
+		
+		// Create a temporary directory and balance file
+		let temp_dir = tempdir().unwrap();
+		let balance_file_path = temp_dir.path().join("balances.json");
+		
+		// Create test balances
+		let mut file = File::create(&balance_file_path).unwrap();
+		write!(
+			file,
+			r#"[
+				{{"account_id": "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48", "balance": "1000000000000000000"}},
+				{{"account_id": "0x90b5ab205c6974c9ea841be688864633dc9ca8a357843eeacf2314649965fe22", "balance": "2000000000000000000"}}
+			]"#
+		).unwrap();
+		
+		// Create a test chain spec
+		let mut spec = TestSpec::from_genesis(
+			"Test Chain",
+			"test_chain",
+			ChainType::Development,
+			|| Genesis(BTreeMap::new()),
+			vec![],
+			None,
+			None,
+			None,
+			None,
+			None,
+		);
+		
+		// Import balances
+		crate::ChainSpec::with_balances_from_file(&mut spec, &balance_file_path).unwrap();
+		
+		// Build storage
+		let storage = spec.build_storage().unwrap();
+		
+		// Calculate the expected storage key prefixes
+		let balances_prefix = sp_core::hashing::twox_128(b"Balances");
+		let account_prefix = sp_core::hashing::twox_128(b"Account");
+		
+		let mut prefix = Vec::new();
+		prefix.extend_from_slice(&balances_prefix);
+		prefix.extend_from_slice(&account_prefix);
+		
+		// Find keys with the Balances prefix
+		let balance_keys: Vec<_> = storage.top.iter()
+			.filter(|(k, _)| k.starts_with(&prefix))
+			.collect();
+		
+		// We should have at least 2 balance entries
+		assert!(balance_keys.len() >= 2, "Expected at least 2 balance entries, found {}", balance_keys.len());
+		
+		// Verify there is storage data for the imported accounts
+		let alice_account = hex::decode("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap();
+		let bob_account = hex::decode("90b5ab205c6974c9ea841be688864633dc9ca8a357843eeacf2314649965fe22").unwrap();
+		
+		// Check if there are keys containing the account IDs
+		// (exact key format depends on the storage implementation)
+		let has_alice = storage.top.iter().any(|(k, _)| 
+			k.starts_with(&prefix) && k.windows(alice_account.len()).any(|w| w == alice_account)
+		);
+		
+		let has_bob = storage.top.iter().any(|(k, _)| 
+			k.starts_with(&prefix) && k.windows(bob_account.len()).any(|w| w == bob_account)
+		);
+		
+		assert!(has_alice, "Should have storage entry for Alice's account");
+		assert!(has_bob, "Should have storage entry for Bob's account");
 	}
 
 	#[test]
