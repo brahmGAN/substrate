@@ -23,7 +23,7 @@ use kitchensink_runtime::{
 	constants::currency::*, wasm_binary_unwrap, BabeConfig, BalancesConfig, Block, CouncilConfig,
 	DemocracyConfig, ElectionsConfig, ImOnlineConfig, IndicesConfig, MaxNominations,
 	NominationPoolsConfig, SessionConfig, SessionKeys, SocietyConfig, StakerStatus, StakingConfig,
-	SudoConfig, SystemConfig, TechnicalCommitteeConfig,
+	SudoConfig, SystemConfig, TechnicalCommitteeConfig, NFTMapConfig,
 };
 use pallet_im_online::sr25519::AuthorityId as ImOnlineId;
 use sc_chain_spec::ChainSpecExtension;
@@ -310,6 +310,9 @@ pub fn testnet_genesis(
 					)
 				})
 				.collect::<Vec<_>>(),
+		},
+		nft_map: NFTMapConfig {
+			nft_mappers: vec![],
 		},
 		staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,

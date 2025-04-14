@@ -569,6 +569,10 @@ impl pallet_staking::BenchmarkingConfig for StakingBenchmarkingConfig {
 	type MaxValidators = ConstU32<1000>;
 }
 
+impl pallet_nftmap::pallet::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+}
+
 impl pallet_staking::Config for Runtime {
 	type MaxNominations = MaxNominations;
 	type Currency = Balances;
@@ -1917,6 +1921,7 @@ construct_runtime!(
 		Nis: pallet_nis,
 		Uniques: pallet_uniques,
 		Nfts: pallet_nfts,
+		NFTMap: pallet_nftmap,
 		NftFractionalization: pallet_nft_fractionalization,
 		Salary: pallet_salary,
 		CoreFellowship: pallet_core_fellowship,

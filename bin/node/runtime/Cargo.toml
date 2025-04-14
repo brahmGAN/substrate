@@ -88,6 +88,7 @@ pallet-message-queue = { version = "7.0.0-dev", default-features = false, path =
 pallet-mmr = { version = "4.0.0-dev", default-features = false, path = "../../../frame/merkle-mountain-range" }
 pallet-multisig = { version = "4.0.0-dev", default-features = false, path = "../../../frame/multisig" }
 pallet-nfts = { version = "4.0.0-dev", default-features = false, path = "../../../frame/nfts" }
+pallet-nftmap = { version = "0.1.0", default-features = false, path = "../../../frame/nftmap" }
 pallet-nfts-runtime-api = { version = "4.0.0-dev", default-features = false, path = "../../../frame/nfts/runtime-api" }
 pallet-nft-fractionalization = { version = "4.0.0-dev", default-features = false, path = "../../../frame/nft-fractionalization" }
 pallet-nomination-pools = { version = "1.0.0", default-features = false, path = "../../../frame/nomination-pools"}
@@ -226,6 +227,7 @@ std = [
 	"pallet-recovery/std",
 	"pallet-uniques/std",
 	"pallet-nfts/std",
+	"pallet-nftmap/std",
 	"pallet-nfts-runtime-api/std",
 	"pallet-nft-fractionalization/std",
 	"pallet-vesting/std",
