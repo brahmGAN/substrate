@@ -130,8 +130,8 @@ where
         total_emission = b0 / divisor;
     }
     
-    // Validator payout is 480/1440 (1/3) of total emission
-    let validator_payout = total_emission.clone() * N::from(480u128) / N::from(1440u128);
+    // Validator payout is 1/4 of total emission
+    let validator_payout = total_emission.clone() * N::from(1u128) / N::from(4u128);
     
     (validator_payout, total_emission)
 }
@@ -195,8 +195,8 @@ mod tests {
                 expected_divisor
             );
             
-            // Verify validator payout is 1/3 of total emission
-            assert_eq!(validator_payout * 3, total_emission);
+            // Verify validator payout is 1/4 of total emission
+            assert_eq!(validator_payout * 4, total_emission);
         }
         
         // Test that the emission never becomes zero even when circulating supply is very close to total
