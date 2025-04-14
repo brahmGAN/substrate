@@ -837,7 +837,6 @@ impl<Balance: AtLeast32BitUnsigned + Clone + core::convert::From<u128>, T: Get<&
 	) -> (Balance, Balance) {
 		let (validator_payout, max_payout) = inflation::compute_total_payout(
 			T::get(),
-			total_staked,
 			total_issuance,
 			// Duration of era; more than u64::MAX is rewarded as u64::MAX.
 			era_duration_millis,

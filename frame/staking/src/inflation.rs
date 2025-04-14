@@ -34,15 +34,17 @@ use core::ops::{Div, Mul};
 pub fn compute_total_payout<N>(
     _yearly_inflation: &PiecewiseLinear<'static>,
     circulating_supply: N,
-    total_supply: N,
     _era_duration: u64,
 ) -> (N, N)
 where
     N: AtLeast32BitUnsigned + Clone + core::convert::From<u128> + Div<Output = N> + Mul<Output = N> + PartialOrd,
 {
     // Define base emission rate (B₀) = 1440 tokens/day (in wei units)
-    let wei_multiplier = N::from(1000000000000000000u128);
+    let wei_multiplier = N::from(1_000_000_000_000_000_000u128);
     let b0 = N::from(1440u128) * wei_multiplier;
+
+    // Total Supply
+    let total_supply = N::from(200_000_000_000_000_000_000_000_000u128); // 200M tokens in wei
     
     // Calculate half of total supply
     let half_supply = total_supply.clone() / N::from(2u128);
@@ -154,7 +156,7 @@ mod tests {
         // First test the 50% boundary case
         // At exactly 50%, we should still be using the old formula with n=5 (2^5 * base_rate)
         let half_supply = total_tokens / 2;
-        let (_, emission_at_half) = compute_total_payout::<u128>(&dummy_inflation, half_supply, total_tokens, 0);
+        let (_, emission_at_half) = compute_total_payout::<u128>(&dummy_inflation, half_supply, 0);
         let expected_at_half = base_rate * 32; // 2^5 * base_rate
         assert_eq!(
             emission_at_half,
@@ -180,7 +182,7 @@ mod tests {
             
             // Get emission at this supply level
             let (validator_payout, total_emission) = 
-                compute_total_payout::<u128>(&dummy_inflation, circulating_supply, total_tokens, 0);
+                compute_total_payout::<u128>(&dummy_inflation, circulating_supply, 0);
                 
             // Expected emission is base_rate / expected_divisor
             let expected_emission = base_rate / expected_divisor;
@@ -202,7 +204,7 @@ mod tests {
         // Test that the emission never becomes zero even when circulating supply is very close to total
         let near_total_supply = total_tokens - 1u128;
         let (_, emission_near_total) = 
-            compute_total_payout::<u128>(&dummy_inflation, near_total_supply, total_tokens, 0);
+            compute_total_payout::<u128>(&dummy_inflation, near_total_supply, 0);
         
         assert!(emission_near_total > 0, "Emission should never be zero");
         }
