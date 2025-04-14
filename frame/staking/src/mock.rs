@@ -19,6 +19,7 @@
 
 use crate::{self as pallet_staking, *};
 use frame_election_provider_support::{onchain, SequentialPhragmen, VoteWeight};
+use pallet_nftmap;
 use frame_support::{
 	assert_ok, ord_parameter_types, parameter_types,
 	traits::{
@@ -96,6 +97,7 @@ frame_support::construct_runtime!(
 		Session: pallet_session,
 		Historical: pallet_session::historical,
 		VoterBagsList: pallet_bags_list::<Instance1>,
+		NFTMap: pallet_nftmap,
 	}
 );
 
@@ -143,6 +145,7 @@ impl frame_system::Config for Test {
 	type OnSetCode = ();
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
+
 impl pallet_balances::Config for Test {
 	type MaxLocks = frame_support::traits::ConstU32<1024>;
 	type MaxReserves = ();
@@ -279,7 +282,9 @@ impl OnStakingUpdate<AccountId, Balance> for EventListenerMock {
 		LedgerSlashPerEra::set((slashed_bonded, slashed_chunks.clone()));
 	}
 }
-
+impl pallet_nftmap::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+}
 impl crate::pallet::pallet::Config for Test {
 	type MaxNominations = MaxNominations;
 	type Currency = Balances;

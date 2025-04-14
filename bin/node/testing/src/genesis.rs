@@ -22,7 +22,7 @@ use crate::keyring::*;
 use kitchensink_runtime::{
 	constants::currency::*, wasm_binary_unwrap, AccountId, AssetsConfig, BabeConfig,
 	BalancesConfig, GluttonConfig, GrandpaConfig, IndicesConfig, RuntimeGenesisConfig,
-	SessionConfig, SocietyConfig, StakerStatus, StakingConfig, SystemConfig,
+	SessionConfig, SocietyConfig, StakerStatus, StakingConfig, SystemConfig, NFTMapConfig,
 	BABE_GENESIS_EPOCH_CONFIG,
 };
 use sp_keyring::{Ed25519Keyring, Sr25519Keyring};
@@ -64,6 +64,9 @@ pub fn config_endowed(code: Option<&[u8]>, extra_endowed: Vec<AccountId>) -> Run
 					to_session_keys(&Ed25519Keyring::Charlie, &Sr25519Keyring::Charlie),
 				),
 			],
+		},
+		nft_map: NFTMapConfig {
+			nft_mappers: vec![],
 		},
 		staking: StakingConfig {
 			stakers: vec![

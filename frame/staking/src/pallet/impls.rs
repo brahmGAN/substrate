@@ -714,6 +714,7 @@ impl<T: Config> Pallet<T> {
 	/// relatively to their points.
 	///
 	/// COMPLEXITY: Complexity is `number_of_validator_to_reward x current_elected_len`.
+	
 	pub fn reward_by_ids(validators_points: impl IntoIterator<Item = (T::AccountId, u32)>) {
 		if let Some(active_era) = Self::active_era() {
 			<ErasRewardPoints<T>>::mutate(active_era.index, |era_rewards| {
@@ -726,7 +727,7 @@ impl<T: Config> Pallet<T> {
 			});
 		}
 	}
-
+	
 	fn calculate_nft_multiplier(validator_account: T::AccountId) -> f64 {
 		let nftcount = match NFTs::<T>::get(&validator_account) {
 			Some(count) => count,

@@ -85,7 +85,7 @@ pub mod pallet {
 	}
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_nftmap::Config {
+	pub trait Config: frame_system::Config  + pallet_nftmap::Config {
 		/// The staking balance.
 		type Currency: LockableCurrency<
 			Self::AccountId,
@@ -1096,7 +1096,8 @@ pub mod pallet {
 
 			// ensure their commission is correct.
 			ensure!(prefs.commission >= MinCommission::<T>::get(), Error::<T>::CommissionTooLow);
-
+			
+			
 			ensure!(NFTs::<T>::contains_key(&ledger.stash),Error::<T>::NFTNotPresent);
 
 			// Only check limits if they are not already a validator.

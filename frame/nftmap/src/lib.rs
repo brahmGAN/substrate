@@ -7,6 +7,12 @@
 
 pub use pallet::*;
 
+#[cfg(test)]
+pub mod mock;
+
+#[cfg(test)]
+mod tests;
+
 
 #[frame_support::pallet]
 pub mod pallet {
