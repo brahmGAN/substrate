@@ -48,6 +48,7 @@ mod dispatchable_tests;
 mod fungible_conformance_tests;
 mod fungible_tests;
 mod reentrancy_tests;
+mod minting_tests;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 
