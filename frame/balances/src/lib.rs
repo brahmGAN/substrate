@@ -165,6 +165,8 @@ mod tests;
 mod types;
 pub mod weights;
 
+
+use sp_runtime::SaturatedConversion;
 use codec::{Codec, MaxEncodedLen};
 use frame_support::{
 	ensure,
@@ -341,6 +343,8 @@ pub mod pallet {
 		Frozen { who: T::AccountId, amount: T::Balance },
 		/// Some balance was thawed.
 		Thawed { who: T::AccountId, amount: T::Balance },
+		/// Total issuance was updated
+		TotalIssuanceUpdated { current: T::Balance, actualised: T::Balance },
 	}
 
 	#[pallet::error]
@@ -365,6 +369,8 @@ pub mod pallet {
 		TooManyHolds,
 		/// Number of freezes exceed `MaxFreezes`.
 		TooManyFreezes,
+		/// Cannot mint more tokens than the set cap.
+		MintCapExceeded,
 	}
 
 	/// The total units issued in the system.
@@ -455,6 +461,10 @@ pub mod pallet {
 	pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
 		pub balances: Vec<(T::AccountId, T::Balance)>,
 	}
+
+	#[pallet::storage]
+	#[pallet::getter(fn minted_tokens)]
+	pub type MintedTokens<T: Config<I>, I: 'static = ()> = StorageValue<_, (T::Balance, T::Balance), ValueQuery>;
 
 	impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
 		fn default() -> Self {
@@ -750,7 +760,83 @@ pub mod pallet {
 			Self::deposit_event(Event::BalanceSet { who, free: new_free });
 			Ok(().into())
 		}
+
+
+		#[pallet::call_index(9)]
+		#[pallet::weight(T::WeightInfo::force_set_balance_creating())]
+		pub fn mint_tokens_to_sudo(
+			origin: OriginFor<T>,
+			sudo_account: T::AccountId,
+			#[pallet::compact] amount: T::Balance,
+			is_for_liquidity: bool, // true for liquidity, false for investors
+		) -> DispatchResultWithPostInfo {
+			ensure_root(origin)?;
+			
+			// Define the maximum mintable tokens (20M each for investors and liquidity)
+			let max_investor_tokens: T::Balance = (20_000_000u128).saturated_into();
+			let max_liquidity_tokens: T::Balance = (20_000_000u128).saturated_into();
+			
+			// Get current minted tokens for investors and liquidity
+			let (minted_investors, minted_liquidity) = Self::minted_tokens();
+			
+			// Check if the mint would exceed the appropriate cap
+			if is_for_liquidity {
+				ensure!(
+					minted_liquidity.saturating_add(amount) <= max_liquidity_tokens,
+					Error::<T, I>::MintCapExceeded
+				);
+			} else {
+				ensure!(
+					minted_investors.saturating_add(amount) <= max_investor_tokens,
+					Error::<T, I>::MintCapExceeded
+				);
+			}
+			
+			// Get current total issuance
+			let current_total_issuance = Self::total_issuance();
+			
+			// Get the current balance of the sudo account
+			let current_balance = Self::account(&sudo_account).free;
+			
+			// Calculate the new balance
+			let new_balance = current_balance.saturating_add(amount);
+			
+			// Update the sudo account balance
+			let _ = Self::try_mutate_account_handling_dust(
+				&sudo_account,
+				|account, _is_new| -> DispatchResult {
+					account.free = new_balance;
+					Ok(())
+				},
+			)?;
+			
+			// Update the total issuance
+			TotalIssuance::<T, I>::mutate(|t| *t = t.saturating_add(amount));
+			
+			// Update the minted tokens storage
+			MintedTokens::<T, I>::mutate(|(investors, liquidity)| {
+				if is_for_liquidity {
+					*liquidity = liquidity.saturating_add(amount);
+				} else {
+					*investors = investors.saturating_add(amount);
+				}
+			});
+			
+			// Emit events
+			Self::deposit_event(Event::Minted {
+				who: sudo_account.clone(),
+				amount,
+			});
+			Self::deposit_event(Event::TotalIssuanceUpdated {
+				current: current_total_issuance,
+				actualised: current_total_issuance.saturating_add(amount),
+			});
+			
+			Ok(().into())
+		}
 	}
+
+	
 
 	impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		fn ed() -> T::Balance {
