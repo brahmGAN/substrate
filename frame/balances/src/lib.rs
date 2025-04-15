@@ -773,8 +773,8 @@ pub mod pallet {
 			ensure_root(origin)?;
 			
 			// Define the maximum mintable tokens (20M each for investors and liquidity)
-			let max_investor_tokens: T::Balance = (20_000_000u128).saturated_into();
-			let max_liquidity_tokens: T::Balance = (20_000_000u128).saturated_into();
+			let max_investor_tokens: T::Balance = (20_000_000_000_000_000_000_000_000u128).saturated_into();
+			let max_liquidity_tokens: T::Balance = (20_000_000_000_000_000_000_000_000u128).saturated_into();
 			
 			// Get current minted tokens for investors and liquidity
 			let (minted_investors, minted_liquidity) = Self::minted_tokens();
