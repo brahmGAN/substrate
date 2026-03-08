@@ -132,8 +132,8 @@ where
         total_emission = b0 / divisor;
     }
     
-    // Validator payout is 1/4 of total emission
-    let validator_payout = total_emission.clone() * N::from(1u128) / N::from(4u128);
+    // Validator payout is removed.
+    let validator_payout = N::from(0u128);
     
     (validator_payout, total_emission)
 }
