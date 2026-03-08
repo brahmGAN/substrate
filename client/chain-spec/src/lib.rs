@@ -174,7 +174,8 @@
 //!
 //! The chain spec can be extended with other fields that are opaque to the default chain spec.
 //! Specific node implementations will need to be able to deserialize these extensions.
-
+pub mod balance_import; //for import balance changes
+pub use balance_import::*;
 mod chain_spec;
 mod extension;
 mod genesis;
@@ -262,6 +263,9 @@ pub trait ChainSpec: BuildStorage + Send + Sync {
 	fn set_storage(&mut self, storage: Storage);
 	/// Returns code substitutes that should be used for the on chain wasm.
 	fn code_substitutes(&self) -> std::collections::BTreeMap<String, Vec<u8>>;
+	// Returns the balances and account IDs from previous chain versions
+	fn with_balances_from_file(&mut self, path: &std::path::Path) -> Result<(), String>;
+
 }
 
 impl std::fmt::Debug for dyn ChainSpec {
